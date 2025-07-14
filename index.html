@@ -12,17 +12,21 @@
         body {
             font-family: 'Noto Sans KR', sans-serif;
         }
-        /* Hide the default file input */
         #file-input {
             display: none;
         }
-        /* Custom styles for better camera view */
         video {
             width: 100%;
             max-width: 640px;
             height: auto;
             border-radius: 0.5rem;
-            transform: scaleX(-1); /* Mirror effect */
+            transform: scaleX(-1); /* Mirror effect for user convenience */
+        }
+        #captured-image {
+            max-width: 100%;
+            max-height: 300px;
+            border-radius: 0.5rem;
+            border: 1px solid #e5e7eb;
         }
         .spinner {
             border: 4px solid rgba(0, 0, 0, 0.1);
@@ -38,7 +42,7 @@
         }
     </style>
 </head>
-<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+<body class="bg-gray-100 flex items-center justify-center min-h-screen py-8">
 
     <div class="bg-white p-6 sm:p-8 rounded-xl shadow-lg max-w-2xl w-full mx-4">
         
@@ -71,15 +75,18 @@
         </main>
 
         <!-- Result Display -->
-        <div id="result-container" class="mt-6 text-center" style="display: none;">
+        <div id="result-container" class="mt-6" style="display: none;">
             <div id="loading" class="flex flex-col items-center justify-center p-4">
                 <div class="spinner"></div>
                 <p class="text-gray-600 mt-3 font-medium">텍스트를 인식하고 있습니다...</p>
             </div>
-            <div id="result-display">
+            <div id="result-display" class="text-center">
+                <h2 class="text-xl font-bold text-gray-800 mb-4">분석된 이미지</h2>
+                <img id="captured-image" src="" alt="Captured Image" class="mx-auto mb-4">
+                
                 <h2 class="text-xl font-bold text-gray-800 mb-3">인식 결과</h2>
                 <div id="result-text" class="p-4 bg-gray-100 rounded-lg text-left whitespace-pre-wrap min-h-[100px] text-gray-700"></div>
-                <button id="retry-btn" class="mt-4 bg-gray-500 text-white font-bold py-2 px-6 rounded-lg hover:bg-gray-600 transition-colors">다시 시도</button>
+                <button id="retry-btn" class="mt-6 bg-gray-500 text-white font-bold py-2 px-6 rounded-lg hover:bg-gray-600 transition-colors">다시 시도</button>
             </div>
         </div>
 
@@ -102,6 +109,7 @@
             const resultDisplay = document.getElementById('result-display');
             const resultText = document.getElementById('result-text');
             const cameraPlaceholder = document.getElementById('camera-placeholder');
+            const capturedImage = document.getElementById('captured-image');
 
             let apiKey = '';
 
@@ -146,13 +154,13 @@
                     return;
                 }
 
-                // Show loading spinner
+                // Show loading spinner and captured image preview
                 mainContent.style.display = 'none';
                 resultContainer.style.display = 'block';
                 loadingSpinner.style.display = 'flex';
                 resultDisplay.style.display = 'none';
+                capturedImage.src = imageData; // Show the image that will be analyzed
 
-                // Remove the Base64 prefix
                 const base64Image = imageData.split(',')[1];
 
                 const requestBody = {
@@ -161,7 +169,8 @@
                             content: base64Image
                         },
                         features: [{
-                            type: 'TEXT_DETECTION'
+                            // **IMPROVEMENT**: Use DOCUMENT_TEXT_DETECTION for better results on dense text/handwriting
+                            type: 'DOCUMENT_TEXT_DETECTION' 
                         }],
                         imageContext: {
                             languageHints: ['ko'] // Hint for Korean language
@@ -187,8 +196,10 @@
                         resultText.textContent = data.responses[0].fullTextAnnotation.text;
                     } else if (data.responses && data.responses[0].error) {
                          console.error('API Error:', data.responses[0].error);
-                         resultText.textContent = `오류가 발생했습니다: ${data.responses[0].error.message}\n\nAPI 키가 유효한지, Cloud Vision API가 활성화되었는지 확인해주세요.`;
+                         resultText.textContent = `오류가 발생했습니다: ${data.responses[0].error.message}\n\nAPI 키가 유효한지, Cloud Vision API가 프로젝트에 활성화되었는지 확인해주세요.`;
                     } else {
+                        // **IMPROVEMENT**: Log the full response for debugging when no text is found
+                        console.log('API did not return text. Full response:', data);
                         resultText.textContent = '인식된 텍스트가 없습니다. 더 선명하게 다시 촬영해 보세요.';
                     }
 
@@ -201,31 +212,25 @@
             }
             
             // --- Event Listeners ---
-
-            // Capture image from camera
             captureBtn.addEventListener('click', () => {
                 const context = canvas.getContext('2d');
-                // Set canvas dimensions to match video to capture a clear image
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
                 
-                // Flip the canvas context horizontally to un-mirror the image
+                // Flip the canvas context horizontally to get the un-mirrored view
                 context.translate(canvas.width, 0);
                 context.scale(-1, 1);
                 
-                // Draw the video frame to the canvas
                 context.drawImage(video, 0, 0, canvas.width, canvas.height);
                 
                 const imageData = canvas.toDataURL('image/jpeg');
                 processImage(imageData);
             });
 
-            // Trigger file input when upload button is clicked
             uploadBtn.addEventListener('click', () => {
                 fileInput.click();
             });
 
-            // Handle file selection
             fileInput.addEventListener('change', (event) => {
                 const file = event.target.files[0];
                 if (file) {
@@ -237,11 +242,10 @@
                 }
             });
 
-            // Reset UI to go back to camera view
             retryBtn.addEventListener('click', () => {
                 resultContainer.style.display = 'none';
                 mainContent.style.display = 'block';
-                fileInput.value = ''; // Reset file input
+                fileInput.value = '';
             });
 
             // --- Initial Setup ---
